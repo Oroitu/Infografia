@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plantilla dinámica de infografías</title>
+  <style>
+    :root{
+      --bg:#0e3a5a;        /* azul marino */
+      --bg-2:#2e69a1;      /* azul medio */
+      --ink:#0b1f2c;       /* tinta */
+      --paper:#ffffff;     /* fondo infographic */
+      --muted:#6b7b88;     /* texto secundario */
+      --gap:16px;          /* separación grid */
+      --radius:14px;       /* border radius */
+      --row-unit:8px;      /* altura base para masonry */
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background:linear-gradient(160deg,var(--bg) 0 35%, var(--bg-2) 35% 36%, #e5ebf1 36%);
+      color:#0e2233;
+    }
+
+    header.appbar{
+      position:sticky; top:0; z-index:50; backdrop-filter:saturate(1.1) blur(6px);
+      background:rgba(14,58,90,.9); color:#fff; padding:14px 18px; display:flex; align-items:center; gap:14px;
+      border-bottom:2px solid rgba(255,255,255,.15);
+    }
+    header.appbar h1{font-size:18px; font-weight:700; margin:0}
+    header.appbar .spacer{flex:1}
+    header.appbar a.btn{color:#fff; text-decoration:none; background:rgba(255,255,255,.12); padding:8px 12px; border-radius:10px; font-weight:600}
+
+    .shell{display:grid; grid-template-columns: 360px 1fr; gap:18px; width:min(1400px, 100%); margin:18px auto; padding:0 14px}
+
+    /* Panel izquierdo ("backend" en el navegador) */
+    .panel{
+      background:#0f2840; color:#e9f4ff; border-radius:18px; box-shadow:0 10px 30px rgba(0,0,0,.18);
+      overflow:hidden; display:flex; flex-direction:column; min-height:72vh
+    }
+    .panel header{padding:16px 18px; background:linear-gradient( to bottom, rgba(255,255,255,.06), rgba(255,255,255,0)); border-bottom:1px solid rgba(255,255,255,.06)}
+    .panel header h2{margin:0; font-size:16px}
+    .panel .content{padding:18px; overflow:auto}
+
+    .panel fieldset{border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:14px; margin:0 0 14px}
+    .panel legend{padding:0 6px; color:#cfe7ff; font-weight:700}
+    label{display:block; font-size:13px; margin:10px 0 6px; color:#cfe0f5}
+    input[type="text"], textarea, input[type="number"], select{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#fff; outline:none;
+    }
+    textarea{min-height:90px; resize:vertical}
+    input[type="file"]{width:100%;}
+
+    .row{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+
+    .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:12px; border:1px solid rgba(0,0,0,.1); cursor:pointer; font-weight:700}
+    .btn.primary{background:#e6f3ff; color:#0c3250}
+    .btn.secondary{background:rgba(255,255,255,.08); color:#fff; border-color:rgba(255,255,255,.12)}
+    .btn.block{width:100%}
+    .btnbar{display:flex; gap:10px; flex-wrap:wrap}
+
+    .hint{font-size:12px; color:#b6c8d9}
+
+    /* Área derecha: vista previa de la infografía */
+    .stage-wrap{position:relative}
+    .stage-tools{position:absolute; top:8px; right:8px; display:flex; gap:8px; z-index:20}
+    .stage-tools .btn{background:#0f2840; color:#fff; border-color:rgba(255,255,255,.08)}
+
+    .infographic{
+      --cols:3;
+      background:var(--paper); color:var(--ink); border-radius:18px; box-shadow:0 18px 50px rgba(0,0,0,.25);
+      padding:26px; min-height:1000px; position:relative;
+    }
+    /* Encabezado fijo */
+    .ig-header{padding:8px 0 14px; border-bottom:4px solid var(--bg); margin-bottom:12px}
+    .ig-header h1{margin:0; font-size:40px; color:var(--bg)}
+    .ig-header h2{margin:8px 0 0; font-weight:500; color:#2c506b}
+
+    /* Grid de bloques */
+    .ig-grid{
+      display:grid; grid-template-columns: repeat(var(--cols), 1fr); gap:var(--gap);
+      grid-auto-rows: var(--row-unit);
+    }
+
+    .block{border-radius:var(--radius); overflow:hidden; border:1px solid #e6eef6; background:#f6fbff}
+    .block.fill-ink{background:#0f2840; color:#eaf5ff}
+    .block .pad{padding:14px}
+    .block h3{margin:0 0 8px; font-size:20px}
+    .block p{margin:0}
+
+    .imgbox{display:block; width:100%; height:100%; overflow:hidden}
+    .imgbox img{display:block; width:100%; height:auto; object-fit:fill}
+
+    .ig-footer{margin-top:16px; padding-top:10px; border-top:2px solid #d3dfeb; display:flex; justify-content:space-between; align-items:center; color:#4a6478}
+
+    /* Print/PDF */
+    @media print{
+      body{background:#fff}
+      header.appbar, .panel, .stage-tools{display:none !important}
+      .shell{grid-template-columns:1fr; margin:0; padding:0}
+      @page{ size: A4 portrait; margin: 10mm }
+      .infographic{box-shadow:none; border-radius:0; padding:10mm; min-height:auto}
+      .ig-header h1{font-size:28pt}
+    }
+
+    /* Responsivo */
+    @media (max-width: 1100px){
+      .shell{grid-template-columns:1fr}
+      .stage-tools{position:static; margin:10px 0}
+    }
+  </style>
+</head>
+<body>
+  <header class="appbar">
+    <h1>Plantilla dinámica de infografías</h1>
+    <span class="spacer"></span>
+    <a class="btn" href="#" onclick="window.print()">Exportar a PDF</a>
+  </header>
+
+  <main class="shell">
+    <!-- PANEL IZQUIERDO ("backend" en el navegador) -->
+    <section class="panel" id="panel">
+      <header><h2>1) Configura tu infografía</h2></header>
+      <div class="content">
+        <fieldset>
+          <legend>Cabecera y pie</legend>
+          <label for="title">Título</label>
+          <input id="title" type="text" placeholder="Título principal" value="Título de ejemplo"/>
+          <label for="subtitle">Subtítulo</label>
+          <input id="subtitle" type="text" placeholder="Subtítulo" value="Un subtítulo descriptivo"/>
+          <label for="footerL">Footer (izquierda)</label>
+          <input id="footerL" type="text" placeholder="Autor / Fuente" value="Autor / Fuente"/>
+          <label for="footerR">Footer (derecha)</label>
+          <input id="footerR" type="text" placeholder="Logo / Fecha" value="Oct 2025"/>
+        </fieldset>
+
+        <fieldset>
+          <legend>Bloques e imágenes</legend>
+          <div class="row">
+            <div>
+              <label for="numText">Nº de bloques de texto</label>
+              <input id="numText" type="number" min="0" max="20" value="3" />
+            </div>
+            <div>
+              <label for="numImg">Nº de imágenes</label>
+              <input id="numImg" type="number" min="0" max="20" value="2" />
+            </div>
+          </div>
+          <p class="hint">Máximo de 3 columnas. Los textos tienen altura ≤ 3×su anchura. Los bloques de imagen respetan su ratio ancho/alto.</p>
+          <div class="btnbar">
+            <button class="btn primary" id="buildForms">Crear formularios</button>
+            <button class="btn secondary" id="clearForms" type="button">Limpiar</button>
+          </div>
+        </fieldset>
+
+        <form id="blocksForm"></form>
+
+        <div class="btnbar">
+          <button class="btn primary block" id="generate">2) Generar infografía</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PREVISUALIZACIÓN (frontend) -->
+    <section class="stage-wrap">
+      <div class="stage-tools">
+        <button class="btn" id="shuffle">Barajar distribución</button>
+        <button class="btn" onclick="window.print()">Exportar a PDF</button>
+      </div>
+      <article class="infographic" id="infographic">
+        <header class="ig-header">
+          <h1 id="ig-title">Título de ejemplo</h1>
+          <h2 id="ig-subtitle">Un subtítulo descriptivo</h2>
+        </header>
+        <section class="ig-grid" id="ig-grid" aria-live="polite"></section>
+        <footer class="ig-footer">
+          <span id="ig-footerL">Autor / Fuente</span>
+          <span id="ig-footerR">Oct 2025</span>
+        </footer>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    // Estado de la app
+    const state = {
+      blocks: [], // {type:'text'|'img', text?, file?, ratio?, id}
+      seed: Math.random() * 1e9 | 0,
+    };
+
+    // Utilidad: pseudo-aleatorio con semilla (para poder "barajar" de forma reproducible)
+    function mulberry32(a){
+      return function(){ let t = a += 0x6D2B79F5; t = Math.imul(t ^ t>>>15, t | 1); t ^= t + Math.imul(t ^ t>>>7, t | 61); return ((t ^ t>>>14) >>> 0) / 4294967296; }
+    }
+
+    // Construye formularios para texto/imagen
+    const blocksForm = document.getElementById('blocksForm');
+    document.getElementById('buildForms').addEventListener('click', (e)=>{
+      e.preventDefault();
+      const nText = +document.getElementById('numText').value || 0;
+      const nImg = +document.getElementById('numImg').value || 0;
+      blocksForm.innerHTML = '';
+      state.blocks = [];
+
+      // Textos
+      for(let i=0;i<nText;i++){
+        const id = crypto.randomUUID();
+        const fs = document.createElement('fieldset');
+        fs.innerHTML = `
+          <legend>Bloque de texto #${i+1}</legend>
+          <label>Título opcional</label>
+          <input type="text" name="title-${id}" placeholder="Encabezado del bloque" value="Bloque ${i+1}" />
+          <label>Contenido</label>
+          <textarea name="text-${id}" placeholder="Escribe el contenido del bloque...">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec commodo.</textarea>
+          <div class="row">
+            <div>
+              <label>Estilo</label>
+              <select name="style-${id}">
+                <option value="light">Claro</option>
+                <option value="dark">Oscuro</option>
+              </select>
+            </div>
+            <div>
+              <label>Importancia</label>
+              <select name="importance-${id}">
+                <option value="auto">Auto</option>
+                <option value="destacado">Destacado</option>
+              </select>
+            </div>
+          </div>
+        `;
+        blocksForm.appendChild(fs);
+        state.blocks.push({ id, type:'text' });
+      }
+
+      // Imágenes
+      for(let i=0;i<nImg;i++){
+        const id = crypto.randomUUID();
+        const fs = document.createElement('fieldset');
+        fs.innerHTML = `
+          <legend>Imagen #${i+1}</legend>
+          <label>Archivo</label>
+          <input type="file" accept="image/*" name="file-${id}" />
+          <div class="row">
+            <div>
+              <label>Ratio ancho</label>
+              <input type="number" step="0.01" min="0.1" value="16" name="rw-${id}" />
+            </div>
+            <div>
+              <label>Ratio alto</label>
+              <input type="number" step="0.01" min="0.1" value="9" name="rh-${id}" />
+            </div>
+          </div>
+          <p class="hint">La plantilla usará este ratio para fijar la altura del bloque según el ancho ocupado.</p>
+        `;
+        blocksForm.appendChild(fs);
+
+        // Autocalcular ratio al cargar imagen
+        fs.querySelector(`input[name="file-${id}"]`).addEventListener('change', (ev)=>{
+          const file = ev.target.files?.[0]; if(!file) return;
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = ()=>{
+            fs.querySelector(`input[name="rw-${id}"]`).value = String(img.naturalWidth);
+            fs.querySelector(`input[name="rh-${id}"]`).value = String(img.naturalHeight);
+            URL.revokeObjectURL(url);
+          };
+          img.src = url;
+        });
+
+        state.blocks.push({ id, type:'img' });
+      }
+    });
+
+    document.getElementById('clearForms').addEventListener('click', (e)=>{
+      e.preventDefault(); blocksForm.innerHTML=''; state.blocks = [];
+    });
+
+    // Generar
+    document.getElementById('generate').addEventListener('click', (e)=>{
+      e.preventDefault();
+      const title = document.getElementById('title').value.trim();
+      const subtitle = document.getElementById('subtitle').value.trim();
+      const footerL = document.getElementById('footerL').value.trim();
+      const footerR = document.getElementById('footerR').value.trim();
+      document.getElementById('ig-title').textContent = title || '—';
+      document.getElementById('ig-subtitle').textContent = subtitle || '';
+      document.getElementById('ig-footerL').textContent = footerL || '';
+      document.getElementById('ig-footerR').textContent = footerR || '';
+
+      // Leer campos por bloque
+      const newBlocks = [];
+      for(const b of state.blocks){
+        if(b.type==='text'){
+          const title = blocksForm.querySelector(`input[name="title-${b.id}"]`)?.value.trim();
+          const text = blocksForm.querySelector(`textarea[name="text-${b.id}"]`)?.value.trim();
+          const style = blocksForm.querySelector(`select[name="style-${b.id}"]`)?.value || 'light';
+          const importance = blocksForm.querySelector(`select[name="importance-${b.id}"]`)?.value || 'auto';
+          if(text) newBlocks.push({type:'text', title, text, style, importance});
+        } else {
+          const f = blocksForm.querySelector(`input[name="file-${b.id}"]`)?.files?.[0] || null;
+          const rw = parseFloat(blocksForm.querySelector(`input[name="rw-${b.id}"]`)?.value || '1');
+          const rh = parseFloat(blocksForm.querySelector(`input[name="rh-${b.id}"]`)?.value || '1');
+          if(f){ newBlocks.push({type:'img', file:f, ratioW:rw, ratioH:rh}); }
+        }
+      }
+      state.data = newBlocks;
+      state.seed = Math.random()*1e9|0;
+      renderInfographic();
+    });
+
+    document.getElementById('shuffle').addEventListener('click', ()=>{
+      state.seed = Math.random()*1e9|0; renderInfographic();
+    });
+
+    // Renderizado de la infografía
+    function renderInfographic(){
+      const grid = document.getElementById('ig-grid');
+      grid.innerHTML = '';
+      const rand = mulberry32(state.seed);
+
+      // Copia y mezcla de bloques
+      const items = (state.data||[]).map((x,i)=>({ ...x, _i:i }));
+      for(let i=items.length-1;i>0;i--){ const j = Math.floor(rand()*(i+1)); [items[i],items[j]]=[items[j],items[i]]; }
+
+      // Info de contenedor
+      const cols = 3; // máximo 3 columnas
+      document.getElementById('infographic').style.setProperty('--cols', cols);
+      const styles = getComputedStyle(grid);
+      const gap = parseFloat(styles.getPropertyValue('gap')) || 16;
+      const totalW = grid.clientWidth || grid.getBoundingClientRect().width;
+      const colW = (totalW - gap*(cols-1)) / cols;
+      const rowUnit = parseFloat(styles.getPropertyValue('grid-auto-rows')) || 8;
+      const toSpan = (px)=> Math.max(1, Math.ceil((px + gap) / rowUnit));
+
+      items.forEach((item)=>{
+        // span de columnas aleatorio 1..3 (sesgo a 1-2)
+        const r = rand();
+        const colSpan = r < 0.12 ? 3 : (r < 0.55 ? 2 : 1);
+        const widthPx = colW*colSpan + gap*(colSpan-1);
+
+        const block = document.createElement('div');
+        block.className = 'block';
+        block.style.gridColumn = `span ${colSpan}`;
+
+        let desiredPxHeight = 0;
+
+        if(item.type==='text'){
+          // Contenido
+          const pad = document.createElement('div'); pad.className='pad';
+          if(item.title){ const h = document.createElement('h3'); h.textContent=item.title; pad.appendChild(h); }
+          const p = document.createElement('p'); p.textContent = item.text; pad.appendChild(p);
+          block.appendChild(pad);
+          if((item.style||'light')==='dark') block.classList.add('fill-ink');
+
+          // Medición FUERA del grid para obtener altura natural real
+          const probe = block.cloneNode(true);
+          probe.style.cssText += `position:absolute; visibility:hidden; left:-9999px; top:-9999px; width:${widthPx}px;`; // mismo ancho que ocupará en grid
+          document.body.appendChild(probe);
+          const naturalH = probe.scrollHeight; // altura real del contenido
+          probe.remove();
+
+          const maxH = 3 * widthPx; // límite: altura ≤ 3× ancho
+          desiredPxHeight = Math.min(naturalH, maxH);
+          if(naturalH > maxH){
+            block.style.maxHeight = `${maxH}px`;
+            block.style.overflow = 'hidden';
+          }
+
+          block.style.gridRowEnd = `span ${toSpan(desiredPxHeight)}`;
+          grid.appendChild(block);
+        }
+        else if(item.type==='img'){
+          const ratioW = (item.ratioW>0?item.ratioW:16);
+          const ratioH = (item.ratioH>0?item.ratioH:9);
+          desiredPxHeight = Math.round(widthPx * (ratioH/ratioW)); // altura según ratio
+
+          const box = document.createElement('div'); box.className='imgbox';
+          // que el contenedor mantenga el ratio visualmente
+          box.style.aspectRatio = `${ratioW} / ${ratioH}`;
+          const img = new Image();
+          const url = URL.createObjectURL(item.file);
+          img.src = url;
+          img.onload = ()=> URL.revokeObjectURL(url);
+          box.appendChild(img);
+          block.appendChild(box);
+
+          block.style.gridRowEnd = `span ${toSpan(desiredPxHeight)}`;
+          grid.appendChild(block);
+        }
+      });
+    }
+
+    // Render inicial vacío (demo por defecto)
+    (function boot(){
+      // construir 2 bloques de texto + 1 imagen demo sin archivos (usará altura del texto)
+      document.getElementById('buildForms').click();
+    })();
+  </script>
+</body>
+</html>
