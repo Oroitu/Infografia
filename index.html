@@ -132,6 +132,28 @@
       position:relative;
     }
 
+    .block-wrapper.drop-before::before,
+    .block-wrapper.drop-after::after{
+      content:'';
+      position:absolute;
+      left:calc(var(--spacing-sm) * -1);
+      right:calc(var(--spacing-sm) * -1);
+      height:4px;
+      background:var(--color-accent);
+      border-radius:999px;
+      box-shadow:0 0 0 2px color-mix(in srgb, var(--color-accent) 28%, transparent);
+      pointer-events:none;
+      z-index:1;
+    }
+
+    .block-wrapper.drop-before::before{
+      top:calc(var(--spacing-sm) * -1);
+    }
+
+    .block-wrapper.drop-after::after{
+      bottom:calc(var(--spacing-sm) * -1);
+    }
+
     .block{
       position:relative;
       border-radius:var(--block-radius, var(--radius-md));
@@ -141,7 +163,6 @@
       overflow:hidden;
       display:flex;
       flex-direction:column;
-      height:100%;
     }
 
     .block.fill-ink{
@@ -551,6 +572,7 @@
     let paletteActiveIndex = -1;
     let suppressAutoSave = false;
     let lastAutoSaveToast = null;
+    let draggingBlockId = null;
 
     const commands = [];
 
@@ -606,6 +628,15 @@
       }
 
       return { dismiss };
+    }
+
+    function clearDropIndicators(){
+      document
+        .querySelectorAll('.block-wrapper.drop-before, .block-wrapper.drop-after')
+        .forEach((element)=>{
+          element.classList.remove('drop-before');
+          element.classList.remove('drop-after');
+        });
     }
 
     function cleanListItems(items){
@@ -1042,12 +1073,17 @@
       handle.setAttribute('aria-label', 'Mover bloque');
       handle.draggable = true;
       handle.addEventListener('dragstart', (event)=>{
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', block.id);
+        draggingBlockId = block.id;
+        if(event.dataTransfer){
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', block.id);
+        }
         wrapper.classList.add('dragging');
       });
       handle.addEventListener('dragend', ()=>{
         wrapper.classList.remove('dragging');
+        draggingBlockId = null;
+        clearDropIndicators();
       });
       toolbar.appendChild(handle);
 
@@ -1192,14 +1228,40 @@
       wrapper.appendChild(article);
 
       wrapper.addEventListener('dragover', (event)=>{
+        if(!draggingBlockId || draggingBlockId === block.id) return;
         event.preventDefault();
-        const draggedId = event.dataTransfer.getData('text/plain');
-        if(!draggedId || draggedId === block.id) return;
-        const draggedIndex = state.blocks.findIndex((b)=>b.id === draggedId);
+        if(event.dataTransfer){
+          event.dataTransfer.dropEffect = 'move';
+        }
+        document
+          .querySelectorAll('.block-wrapper.drop-before, .block-wrapper.drop-after')
+          .forEach((element)=>{
+            if(element !== wrapper){
+              element.classList.remove('drop-before');
+              element.classList.remove('drop-after');
+            }
+          });
+        const rect = wrapper.getBoundingClientRect();
+        const before = event.clientY < rect.top + rect.height / 2;
+        wrapper.classList.toggle('drop-before', before);
+        wrapper.classList.toggle('drop-after', !before);
+      });
+
+      wrapper.addEventListener('dragleave', ()=>{
+        wrapper.classList.remove('drop-before');
+        wrapper.classList.remove('drop-after');
+      });
+
+      wrapper.addEventListener('drop', (event)=>{
+        if(!draggingBlockId || draggingBlockId === block.id) return;
+        event.preventDefault();
+        const draggedIndex = state.blocks.findIndex((b)=>b.id === draggingBlockId);
         if(draggedIndex < 0) return;
         const rect = wrapper.getBoundingClientRect();
         const before = event.clientY < rect.top + rect.height / 2;
         const targetIndex = before ? index : index + 1;
+        draggingBlockId = null;
+        clearDropIndicators();
         moveBlock(draggedIndex, targetIndex);
       });
 
