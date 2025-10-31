@@ -140,15 +140,15 @@
           <legend>Bloques e imágenes</legend>
           <div class="row">
             <div>
-              <label for="numText">Nº de bloques de texto</label>
+              <label for="numText">Bloques de texto a añadir</label>
               <input id="numText" type="number" min="0" max="20" value="3" />
             </div>
             <div>
-              <label for="numImg">Nº de imágenes</label>
+              <label for="numImg">Bloques de imagen a añadir</label>
               <input id="numImg" type="number" min="0" max="20" value="2" />
             </div>
           </div>
-          <p class="hint">Máximo de 3 columnas. Los textos tienen altura ≤ 3×su anchura. Los bloques de imagen respetan su ratio ancho/alto.</p>
+          <p class="hint">Máximo de 3 columnas. Los textos tienen altura ≤ 3×su anchura. Los bloques de imagen respetan su ratio ancho/alto. Los formularios existentes se mantienen, puedes sumar más con estos campos.</p>
           <div class="btnbar">
             <button class="btn primary" id="buildForms">Crear formularios</button>
             <button class="btn secondary" id="clearForms" type="button">Limpiar</button>
@@ -202,87 +202,167 @@
 
     // Construye formularios para texto/imagen
     const blocksForm = document.getElementById('blocksForm');
-    document.getElementById('buildForms').addEventListener('click', (e)=>{
-      e.preventDefault();
-      const nText = +document.getElementById('numText').value || 0;
-      const nImg = +document.getElementById('numImg').value || 0;
+    const numTextInput = document.getElementById('numText');
+    const numImgInput = document.getElementById('numImg');
+
+    function currentTextCount(){
+      return state.blocks.filter((b)=>b.type === 'text').length;
+    }
+
+    function currentImageCount(){
+      return state.blocks.filter((b)=>b.type === 'img').length;
+    }
+
+    function setupImageRatioAuto(fs, id){
+      const fileField = fs.querySelector(`input[name="file-${id}"]`);
+      if(!fileField) return;
+      fileField.addEventListener('change', (ev)=>{
+        const file = ev.target.files?.[0];
+        if(!file){
+          fs.dataset.fileName = '';
+          return;
+        }
+        fs.dataset.fileName = file.name || '';
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = ()=>{
+          const rw = fs.querySelector(`input[name="rw-${id}"]`);
+          const rh = fs.querySelector(`input[name="rh-${id}"]`);
+          if(rw) rw.value = String(img.naturalWidth || 16);
+          if(rh) rh.value = String(img.naturalHeight || 9);
+          URL.revokeObjectURL(url);
+        };
+        img.onerror = ()=> URL.revokeObjectURL(url);
+        img.src = url;
+      });
+    }
+
+    function createTextBlock(initial = {}){
+      const id = crypto.randomUUID();
+      const index = currentTextCount() + 1;
+      const fs = document.createElement('fieldset');
+      fs.dataset.blockId = id;
+      fs.dataset.blockType = 'text';
+      fs.innerHTML = `
+        <legend>Bloque de texto #${index}</legend>
+        <label>Título opcional</label>
+        <input type="text" name="title-${id}" placeholder="Encabezado del bloque" />
+        <label>Contenido</label>
+        <textarea name="text-${id}" placeholder="Escribe el contenido del bloque..."></textarea>
+        <div class="row">
+          <div>
+            <label>Estilo</label>
+            <select name="style-${id}">
+              <option value="light">Claro</option>
+              <option value="dark">Oscuro</option>
+            </select>
+          </div>
+          <div>
+            <label>Importancia</label>
+            <select name="importance-${id}">
+              <option value="auto">Auto</option>
+              <option value="destacado">Destacado</option>
+            </select>
+          </div>
+        </div>
+      `;
+
+      blocksForm.appendChild(fs);
+      state.blocks.push({ id, type:'text' });
+
+      const titleField = fs.querySelector(`input[name="title-${id}"]`);
+      const textField = fs.querySelector(`textarea[name="text-${id}"]`);
+      const styleField = fs.querySelector(`select[name="style-${id}"]`);
+      const importanceField = fs.querySelector(`select[name="importance-${id}"]`);
+
+      if(titleField) titleField.value = initial.title ?? `Bloque ${index}`;
+      if(textField) textField.value = initial.text ?? 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec commodo.';
+      if(styleField){
+        const style = (initial.style === 'dark') ? 'dark' : 'light';
+        styleField.value = style;
+      }
+      if(importanceField){
+        const importance = initial.importance === 'destacado' ? 'destacado' : 'auto';
+        importanceField.value = importance;
+      }
+    }
+
+    function createImageBlock(initial = {}){
+      const id = crypto.randomUUID();
+      const index = currentImageCount() + 1;
+      const fs = document.createElement('fieldset');
+      fs.dataset.blockId = id;
+      fs.dataset.blockType = 'img';
+      fs.innerHTML = `
+        <legend>Imagen #${index}</legend>
+        <label>Archivo</label>
+        <input type="file" accept="image/*" name="file-${id}" />
+        <label>URL o ruta de la imagen</label>
+        <input type="text" placeholder="https://ejemplo.com/imagen.jpg" name="url-${id}" />
+        <div class="row">
+          <div>
+            <label>Ratio ancho</label>
+            <input type="number" step="0.01" min="0.1" value="16" name="rw-${id}" />
+          </div>
+          <div>
+            <label>Ratio alto</label>
+            <input type="number" step="0.01" min="0.1" value="9" name="rh-${id}" />
+          </div>
+        </div>
+        <p class="hint">La plantilla usará este ratio para fijar la altura del bloque según el ancho ocupado.</p>
+      `;
+
+      blocksForm.appendChild(fs);
+      state.blocks.push({ id, type:'img' });
+
+      fs.dataset.fileName = initial.name || '';
+
+      const urlField = fs.querySelector(`input[name="url-${id}"]`);
+      const rwField = fs.querySelector(`input[name="rw-${id}"]`);
+      const rhField = fs.querySelector(`input[name="rh-${id}"]`);
+
+      const ratioW = Number(initial.ratioW ?? initial.ratio ?? initial.width);
+      const ratioH = Number(initial.ratioH ?? initial.height);
+
+      if(urlField) urlField.value = initial.url || initial.src || '';
+      if(rwField) rwField.value = Number.isFinite(ratioW) && ratioW > 0 ? String(ratioW) : '16';
+      if(rhField) rhField.value = Number.isFinite(ratioH) && ratioH > 0 ? String(ratioH) : '9';
+
+      setupImageRatioAuto(fs, id);
+    }
+
+    function addTextBlocks(count, data = []){
+      for(let i=0;i<count;i++){
+        createTextBlock(data[i] || {});
+      }
+    }
+
+    function addImageBlocks(count, data = []){
+      for(let i=0;i<count;i++){
+        createImageBlock(data[i] || {});
+      }
+    }
+
+    function resetForms(){
       blocksForm.innerHTML = '';
       state.blocks = [];
+    }
 
-      // Textos
-      for(let i=0;i<nText;i++){
-        const id = crypto.randomUUID();
-        const fs = document.createElement('fieldset');
-        fs.innerHTML = `
-          <legend>Bloque de texto #${i+1}</legend>
-          <label>Título opcional</label>
-          <input type="text" name="title-${id}" placeholder="Encabezado del bloque" value="Bloque ${i+1}" />
-          <label>Contenido</label>
-          <textarea name="text-${id}" placeholder="Escribe el contenido del bloque...">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec commodo.</textarea>
-          <div class="row">
-            <div>
-              <label>Estilo</label>
-              <select name="style-${id}">
-                <option value="light">Claro</option>
-                <option value="dark">Oscuro</option>
-              </select>
-            </div>
-            <div>
-              <label>Importancia</label>
-              <select name="importance-${id}">
-                <option value="auto">Auto</option>
-                <option value="destacado">Destacado</option>
-              </select>
-            </div>
-          </div>
-        `;
-        blocksForm.appendChild(fs);
-        state.blocks.push({ id, type:'text' });
-      }
-
-      // Imágenes
-      for(let i=0;i<nImg;i++){
-        const id = crypto.randomUUID();
-        const fs = document.createElement('fieldset');
-        fs.innerHTML = `
-          <legend>Imagen #${i+1}</legend>
-          <label>Archivo</label>
-          <input type="file" accept="image/*" name="file-${id}" />
-          <label>URL de la imagen</label>
-          <input type="url" placeholder="https://ejemplo.com/imagen.jpg" name="url-${id}" />
-          <div class="row">
-            <div>
-              <label>Ratio ancho</label>
-              <input type="number" step="0.01" min="0.1" value="16" name="rw-${id}" />
-            </div>
-            <div>
-              <label>Ratio alto</label>
-              <input type="number" step="0.01" min="0.1" value="9" name="rh-${id}" />
-            </div>
-          </div>
-          <p class="hint">La plantilla usará este ratio para fijar la altura del bloque según el ancho ocupado.</p>
-        `;
-        blocksForm.appendChild(fs);
-
-        // Autocalcular ratio al cargar imagen
-        fs.querySelector(`input[name="file-${id}"]`).addEventListener('change', (ev)=>{
-          const file = ev.target.files?.[0]; if(!file) return;
-          const url = URL.createObjectURL(file);
-          const img = new Image();
-          img.onload = ()=>{
-            fs.querySelector(`input[name="rw-${id}"]`).value = String(img.naturalWidth);
-            fs.querySelector(`input[name="rh-${id}"]`).value = String(img.naturalHeight);
-            URL.revokeObjectURL(url);
-          };
-          img.src = url;
-        });
-
-        state.blocks.push({ id, type:'img' });
-      }
+    document.getElementById('buildForms').addEventListener('click', (e)=>{
+      e.preventDefault();
+      const nText = Math.max(0, Math.floor(Number(numTextInput.value) || 0));
+      const nImg = Math.max(0, Math.floor(Number(numImgInput.value) || 0));
+      if(nText) addTextBlocks(nText);
+      if(nImg) addImageBlocks(nImg);
+      numTextInput.value = '0';
+      numImgInput.value = '0';
     });
 
     document.getElementById('clearForms').addEventListener('click', (e)=>{
-      e.preventDefault(); blocksForm.innerHTML=''; state.blocks = [];
+      e.preventDefault();
+      resetForms();
+      numTextInput.value = '0';
+      numImgInput.value = '0';
     });
 
     function collectFormData(){
@@ -313,14 +393,21 @@
           const urlInput = blocksForm.querySelector(`input[name="url-${b.id}"]`);
           const rwInput = blocksForm.querySelector(`input[name="rw-${b.id}"]`);
           const rhInput = blocksForm.querySelector(`input[name="rh-${b.id}"]`);
+          const fieldset = blocksForm.querySelector(`fieldset[data-block-id="${b.id}"]`);
           const file = fileInput?.files?.[0] || null;
           const url = urlInput?.value.trim() || '';
           const ratioW = parseFloat(rwInput?.value || '1') || 1;
           const ratioH = parseFloat(rhInput?.value || '1') || 1;
           if(file || url){
             const block = { type:'img', ratioW, ratioH };
-            if(file) block.file = file;
+            if(file){
+              block.file = file;
+              if(file.name) block.name = file.name;
+            }
             if(url) block.url = url;
+            if(!file && fieldset?.dataset.fileName){
+              block.name = fieldset.dataset.fileName;
+            }
             blocks.push(block);
           }
         }
@@ -336,7 +423,16 @@
       document.getElementById('ig-footerR').textContent = meta.footerR || '';
     }
 
-    function sanitizeBlocksForSaving(blocks){
+    function readFileAsDataURL(file){
+      return new Promise((resolve, reject)=>{
+        const reader = new FileReader();
+        reader.onload = ()=> resolve(reader.result);
+        reader.onerror = ()=> reject(reader.error || new Error('No se pudo leer el archivo.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function sanitizeBlocksForSaving(blocks){
       const plain = [];
       let droppedImages = 0;
       for(const block of blocks){
@@ -349,14 +445,28 @@
             importance:block.importance || 'auto',
           });
         } else if(block.type === 'img'){
+          const ratioW = block.ratioW || 1;
+          const ratioH = block.ratioH || 1;
+          const base = { type:'img', ratioW, ratioH };
           const url = (block.url || '').trim();
           if(url){
-            plain.push({
-              type:'img',
-              url,
-              ratioW:block.ratioW || 1,
-              ratioH:block.ratioH || 1,
-            });
+            const entry = { ...base, url };
+            if(block.name) entry.name = block.name;
+            plain.push(entry);
+          } else if(block.file && typeof File !== 'undefined' && block.file instanceof File){
+            try{
+              const dataUrl = await readFileAsDataURL(block.file);
+              if(typeof dataUrl === 'string' && dataUrl){
+                const entry = { ...base, url: dataUrl };
+                const name = block.name || block.file.name;
+                if(name) entry.name = name;
+                plain.push(entry);
+              } else {
+                droppedImages++;
+              }
+            } catch(err){
+              droppedImages++;
+            }
           } else {
             droppedImages++;
           }
@@ -376,34 +486,11 @@
       document.getElementById('footerL').value = data.footerL || '';
       document.getElementById('footerR').value = data.footerR || '';
 
-      document.getElementById('numText').value = textBlocks.length;
-      document.getElementById('numImg').value = imgBlocks.length;
-
-      document.getElementById('buildForms').click();
-
-      let textIndex = 0;
-      let imgIndex = 0;
-      for(const block of state.blocks){
-        if(block.type === 'text'){
-          const info = textBlocks[textIndex++] || {};
-          const titleField = blocksForm.querySelector(`input[name="title-${block.id}"]`);
-          const textField = blocksForm.querySelector(`textarea[name="text-${block.id}"]`);
-          const styleField = blocksForm.querySelector(`select[name="style-${block.id}"]`);
-          const importanceField = blocksForm.querySelector(`select[name="importance-${block.id}"]`);
-          if(titleField) titleField.value = info.title || '';
-          if(textField) textField.value = info.text || '';
-          if(styleField) styleField.value = info.style || 'light';
-          if(importanceField) importanceField.value = info.importance || 'auto';
-        } else if(block.type === 'img'){
-          const info = imgBlocks[imgIndex++] || {};
-          const urlField = blocksForm.querySelector(`input[name="url-${block.id}"]`);
-          const rwField = blocksForm.querySelector(`input[name="rw-${block.id}"]`);
-          const rhField = blocksForm.querySelector(`input[name="rh-${block.id}"]`);
-          if(urlField) urlField.value = info.url || info.src || '';
-          if(rwField) rwField.value = info.ratioW || info.ratio || info.width || 16;
-          if(rhField) rhField.value = info.ratioH || info.height || 9;
-        }
-      }
+      resetForms();
+      addTextBlocks(textBlocks.length, textBlocks);
+      addImageBlocks(imgBlocks.length, imgBlocks);
+      numTextInput.value = '0';
+      numImgInput.value = '0';
 
       const meta = collectFormData();
       state.data = meta.blocks;
@@ -422,10 +509,10 @@
       renderInfographic();
     });
 
-    document.getElementById('saveInfographic').addEventListener('click', ()=>{
+    document.getElementById('saveInfographic').addEventListener('click', async ()=>{
       try{
         const meta = collectFormData();
-        const { plain, droppedImages } = sanitizeBlocksForSaving(meta.blocks);
+        const { plain, droppedImages } = await sanitizeBlocksForSaving(meta.blocks);
         const payload = {
           version: 1,
           title: meta.title,
@@ -448,7 +535,7 @@
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         if(droppedImages){
-          alert(`Se omitieron ${droppedImages} imagen(es) sin URL en el archivo guardado.`);
+          alert(`Se omitieron ${droppedImages} imagen(es) sin fuente disponible en el archivo guardado.`);
         }
       } catch(err){
         console.error(err);
@@ -594,6 +681,7 @@
           const src = item.file ? URL.createObjectURL(item.file) : (item.url || '').trim();
           if(!src){ return; }
           img.decoding = 'async';
+          img.alt = item.name || '';
           img.addEventListener('load', ()=>{
             scheduleSizing(block, 'img');
             if(item.file) URL.revokeObjectURL(src);
