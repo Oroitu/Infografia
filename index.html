@@ -126,6 +126,16 @@
     .block .pad{padding:var(--spacing-md)}
     .block h3{margin:0 0 var(--spacing-xs); font-size:20px; font-family:var(--font-heading); font-weight:var(--font-weight-heading)}
     .block p{margin:0; font-family:var(--font-body); line-height:1.5}
+    .block[data-kind="list"] .pad{display:flex; flex-direction:column; gap:var(--spacing-sm)}
+    .block[data-kind="list"] .list{margin:0; padding-left:var(--list-indent, var(--spacing-md)); display:flex; flex-direction:column; gap:var(--list-gap, var(--spacing-md)); list-style-position:outside; align-items:flex-start}
+    .block[data-kind="list"] .list li{margin:0; font-family:var(--font-body); line-height:1.5}
+    .block[data-kind="list"] .list[data-type="bulleted"]{list-style-type:disc}
+    .block[data-kind="list"] .list[data-type="numbered"]{list-style-type:decimal}
+    .block[data-kind="list"] .list[data-marker="dash"]{list-style:none}
+    .block[data-kind="list"] .list[data-marker="dash"] li{position:relative; padding-left:1.4em}
+    .block[data-kind="list"] .list[data-marker="dash"] li::before{content:'–'; position:absolute; left:0; color:currentColor}
+    .block[data-kind="list"][data-list-align="center"] .list{text-align:center; list-style-position:inside; align-items:center}
+    .block[data-kind="list"][data-list-align="end"] .list{text-align:right; list-style-position:inside; align-items:flex-end}
 
     .imgbox{display:block; width:100%; overflow:hidden}
     .imgbox img{display:block; width:100%; height:100%; object-fit:cover}
@@ -147,6 +157,27 @@
       .shell{grid-template-columns:1fr}
       .stage-tools{position:static; margin:var(--spacing-sm) 0}
     }
+
+    /* Controles de lista en panel */
+    .panel .list-controls{display:flex; flex-direction:column; gap:var(--spacing-sm); padding:var(--spacing-sm); border-radius:var(--radius-sm); background:color-mix(in srgb, var(--color-on-surface) 6%, transparent); border:1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent)}
+    .panel .list-controls .row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+    .panel .list-editor{display:flex; flex-direction:column; gap:var(--spacing-xs)}
+    .panel .list-editor .list-item{display:flex; gap:var(--spacing-xs); align-items:center}
+    .panel .list-editor .list-item input{flex:1}
+    .panel .list-editor .list-item button{min-width:32px; height:32px; border:none; background:color-mix(in srgb, var(--color-on-surface) 8%, transparent); color:var(--color-on-surface); border-radius:var(--radius-sm); cursor:pointer}
+    .panel .list-editor .list-item button:hover{background:color-mix(in srgb, var(--color-on-surface) 12%, transparent)}
+    .panel .list-actions{display:flex; gap:var(--spacing-xs); flex-wrap:wrap; margin-top:var(--spacing-xs)}
+    .panel .list-actions button{border:none; border-radius:var(--radius-sm); background:color-mix(in srgb, var(--color-on-surface) 8%, transparent); color:var(--color-on-surface); padding:var(--spacing-xs) var(--spacing-sm); cursor:pointer}
+    .panel .list-actions button:hover{background:color-mix(in srgb, var(--color-on-surface) 12%, transparent)}
+
+    /* Toast */
+    .toast-container{position:fixed; bottom:var(--spacing-lg); right:var(--spacing-lg); display:flex; flex-direction:column; gap:var(--spacing-sm); z-index:120}
+    .toast{background:var(--color-surface); color:var(--color-on-surface); padding:var(--spacing-sm) var(--spacing-md); border-radius:var(--radius-md); box-shadow:var(--shadow-md); border:1px solid var(--color-surface-border); display:flex; flex-direction:column; gap:var(--spacing-xs); max-width:320px}
+    .toast strong{font-family:var(--font-heading); font-size:14px}
+    .toast-actions{display:flex; gap:var(--spacing-xs); justify-content:flex-end}
+    .toast-actions button{border:none; border-radius:var(--radius-sm); padding:var(--spacing-xs) var(--spacing-sm); cursor:pointer; background:color-mix(in srgb, var(--color-on-surface) 8%, transparent); color:var(--color-on-surface); font-weight:600}
+    .toast-actions button.primary{background:var(--color-accent); color:var(--color-on-accent)}
+    .toast-actions button:hover{filter:brightness(1.05)}
   </style>
 </head>
 <body>
@@ -245,6 +276,257 @@
     const root = document.documentElement;
     const themeSelect = document.getElementById('themePack');
     const contrastReport = document.getElementById('contrastReport');
+
+    const LIST_DEFAULT_STYLE = Object.freeze({
+      type:'bulleted',
+      marker:'bullet',
+      gap:'md',
+      indent:'md',
+      align:'start',
+    });
+
+    function ensureToastContainer(){
+      let container = document.querySelector('.toast-container');
+      if(!container){
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+      }
+      return container;
+    }
+
+    function showToast(message, actions = [], options = {}){
+      const container = ensureToastContainer();
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      const label = document.createElement('strong');
+      label.textContent = message;
+      toast.appendChild(label);
+
+      if(actions.length){
+        const actionsBar = document.createElement('div');
+        actionsBar.className = 'toast-actions';
+        for(const action of actions){
+          if(!action || typeof action.label !== 'string') continue;
+          const button = document.createElement('button');
+          button.textContent = action.label;
+          if(action.primary) button.classList.add('primary');
+          button.addEventListener('click', ()=>{
+            try{
+              if(typeof action.onClick === 'function') action.onClick();
+            } finally {
+              dismiss();
+            }
+          });
+          actionsBar.appendChild(button);
+        }
+        toast.appendChild(actionsBar);
+      }
+
+      container.appendChild(toast);
+
+      const timeout = typeof options.duration === 'number' ? options.duration : 8000;
+      let timerId = null;
+
+      const dismiss = ()=>{
+        if(timerId) clearTimeout(timerId);
+        if(toast.isConnected){
+          toast.remove();
+        }
+      };
+
+      if(timeout > 0){
+        timerId = setTimeout(dismiss, timeout);
+      }
+
+      return { dismiss };
+    }
+
+    function cleanListItems(items){
+      const normalized = [];
+      let previousEmpty = false;
+      for(const raw of items || []){
+        const text = typeof raw === 'string' ? raw.trim() : '';
+        if(!text){
+          if(previousEmpty) continue;
+          previousEmpty = true;
+          normalized.push('');
+        } else {
+          normalized.push(text);
+          previousEmpty = false;
+        }
+      }
+      while(normalized.length && !normalized[0]) normalized.shift();
+      while(normalized.length && !normalized[normalized.length-1]) normalized.pop();
+      return normalized;
+    }
+
+    function parseBulletedSequence(lines){
+      const items = [];
+      let markerSymbol = null;
+      let capturing = false;
+      for(const line of lines){
+        const trimmed = line.trim();
+        if(!trimmed){
+          if(capturing && items.length >= 2) break;
+          continue;
+        }
+        const match = trimmed.match(/^([-*•])\s+(.*)$/);
+        if(match){
+          capturing = true;
+          if(!markerSymbol) markerSymbol = match[1];
+          items.push(match[2]);
+        } else if(capturing){
+          break;
+        }
+      }
+      const normalized = cleanListItems(items);
+      if(normalized.length >= 2){
+        const marker = markerSymbol === '-' ? 'dash' : 'bullet';
+        return { type:'bulleted', marker, items: normalized };
+      }
+      return null;
+    }
+
+    function parseNumberedSequence(lines){
+      const items = [];
+      let capturing = false;
+      for(const line of lines){
+        const trimmed = line.trim();
+        if(!trimmed){
+          if(capturing && items.length >= 2) break;
+          continue;
+        }
+        const match = trimmed.match(/^(\d+)[\.\)ºª]?\s+(.*)$/i);
+        if(match){
+          const number = parseInt(match[1], 10);
+          if(!capturing){
+            if(number !== 1) continue;
+            capturing = true;
+            items.push(match[2]);
+          } else {
+            if(items.length === 1 && number !== 2){
+              return null;
+            }
+            items.push(match[2]);
+          }
+        } else if(capturing){
+          break;
+        }
+      }
+      const normalized = cleanListItems(items);
+      if(normalized.length >= 2){
+        return { type:'numbered', marker:'decimal', items: normalized };
+      }
+      return null;
+    }
+
+    function detectListStructure(text){
+      if(typeof text !== 'string') return null;
+      const lines = text.split(/\r?\n/);
+      return parseBulletedSequence(lines) || parseNumberedSequence(lines);
+    }
+
+    function serializeListToText(items, listType, marker){
+      const normalized = cleanListItems(items);
+      if(!normalized.length) return '';
+      if(listType === 'numbered'){
+        return normalized.map((item, index)=>`${index + 1}. ${item}`).join('\n');
+      }
+      const prefix = '-';
+      return normalized.map((item)=>`${prefix} ${item}`).join('\n');
+    }
+
+    function spacingTokenToCss(token){
+      switch(token){
+        case 'xs': return 'var(--spacing-xs)';
+        case 'sm': return 'var(--spacing-sm)';
+        case 'lg': return 'var(--spacing-lg)';
+        default: return 'var(--spacing-md)';
+      }
+    }
+
+    function indentTokenToCss(token){
+      switch(token){
+        case 'none': return '0px';
+        case 'sm': return 'var(--spacing-sm)';
+        case 'lg': return 'calc(var(--spacing-lg) + var(--spacing-sm))';
+        default: return 'var(--spacing-md)';
+      }
+    }
+
+    function resolveBlockTone(style){
+      if(typeof style === 'string') return style === 'dark' ? 'dark' : 'light';
+      if(style && typeof style === 'object'){
+        const tone = style.tone || style.mode || style.variant || style.theme;
+        return tone === 'dark' ? 'dark' : 'light';
+      }
+      return 'light';
+    }
+
+    function normalizeTextBlock(block){
+      if(!block || typeof block !== 'object') return null;
+      const tone = resolveBlockTone(block.style);
+      const title = typeof block.title === 'string' ? block.title : '';
+      const importance = block.importance === 'destacado' ? 'destacado' : 'auto';
+      let text = typeof block.text === 'string' ? block.text : '';
+      let kind = block.kind === 'list' ? 'list' : 'text';
+      const declaredItems = Array.isArray(block.content?.items) ? block.content.items : [];
+      let items = cleanListItems(declaredItems.map((item)=>typeof item?.text === 'string' ? item.text : ''));
+      let inferredStyle = null;
+
+      if(kind === 'list' && !items.length && text){
+        const parsed = detectListStructure(text);
+        if(parsed){
+          items = parsed.items;
+          inferredStyle = parsed;
+          kind = 'list';
+        }
+      }
+
+      if(kind !== 'list' && !items.length && text){
+        const parsed = detectListStructure(text);
+        if(parsed){
+          items = parsed.items;
+          inferredStyle = parsed;
+          kind = 'list';
+        }
+      }
+
+      const listStyleSource = (block.style && typeof block.style === 'object' && block.style.list) || block.listStyle || {};
+      const listStyle = { ...LIST_DEFAULT_STYLE, ...listStyleSource };
+      if(inferredStyle){
+        listStyle.type = inferredStyle.type;
+        if(inferredStyle.marker) listStyle.marker = inferredStyle.marker;
+      }
+      if(listStyle.type === 'numbered'){
+        listStyle.marker = 'decimal';
+      } else if(listStyle.marker !== 'dash'){
+        listStyle.marker = 'bullet';
+      }
+
+      if(kind === 'list' && items.length){
+        if(!text) text = serializeListToText(items, listStyle.type, listStyle.marker);
+        return {
+          type:'text',
+          title,
+          kind:'list',
+          text,
+          content:{ items: items.map((value)=>({ text:value })) },
+          style:{ tone, list: listStyle },
+          importance,
+        };
+      }
+
+      return {
+        type:'text',
+        title,
+        kind:'text',
+        text,
+        style:{ tone },
+        importance,
+      };
+    }
 
     function hexToRgb(color){
       if(typeof color !== 'string') return null;
@@ -495,21 +777,80 @@
       fs.dataset.blockType = 'text';
       fs.innerHTML = `
         <legend>Bloque de texto #${index}</legend>
-        <label>Título opcional</label>
-        <input type="text" name="title-${id}" placeholder="Encabezado del bloque" />
-        <label>Contenido</label>
-        <textarea name="text-${id}" placeholder="Escribe el contenido del bloque..."></textarea>
+        <label for="title-${id}">Título opcional</label>
+        <input type="text" id="title-${id}" name="title-${id}" placeholder="Encabezado del bloque" />
+        <label for="kind-${id}">El bloque es</label>
+        <select id="kind-${id}" name="kind-${id}">
+          <option value="text">Párrafo</option>
+          <option value="list">Lista</option>
+        </select>
+        <div data-text-editor>
+          <label for="text-${id}">Contenido</label>
+          <textarea id="text-${id}" name="text-${id}" placeholder="Escribe el contenido del bloque..."></textarea>
+        </div>
+        <div class="list-controls" data-list-controls hidden>
+          <div class="row">
+            <div>
+              <label for="list-type-${id}">Tipo</label>
+              <select id="list-type-${id}" name="list-type-${id}">
+                <option value="bulleted">Viñetas</option>
+                <option value="numbered">Numerada</option>
+              </select>
+            </div>
+            <div>
+              <label data-marker-label for="list-marker-${id}">Viñeta</label>
+              <select id="list-marker-${id}" name="list-marker-${id}">
+                <option value="bullet">• redonda</option>
+                <option value="dash">– guion</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="list-gap-${id}">Separación</label>
+              <select id="list-gap-${id}" name="list-gap-${id}">
+                <option value="xs">XS</option>
+                <option value="sm">SM</option>
+                <option value="md" selected>MD</option>
+                <option value="lg">LG</option>
+              </select>
+            </div>
+            <div>
+              <label for="list-indent-${id}">Indentación</label>
+              <select id="list-indent-${id}" name="list-indent-${id}">
+                <option value="none">Sin sangría</option>
+                <option value="sm">SM</option>
+                <option value="md" selected>MD</option>
+                <option value="lg">LG</option>
+              </select>
+            </div>
+            <div>
+              <label for="list-align-${id}">Alineación</label>
+              <select id="list-align-${id}" name="list-align-${id}">
+                <option value="start">Inicio</option>
+                <option value="center">Centro</option>
+                <option value="end">Fin</option>
+              </select>
+            </div>
+          </div>
+          <label>Ítems</label>
+          <div class="list-editor" data-list-editor data-list-items="${id}"></div>
+          <div class="list-actions">
+            <button type="button" data-add-list-item>Añadir ítem</button>
+            <button type="button" data-convert-to-text>Convertir en texto</button>
+          </div>
+        </div>
         <div class="row">
           <div>
-            <label>Estilo</label>
-            <select name="style-${id}">
+            <label for="style-${id}">Estilo</label>
+            <select id="style-${id}" name="style-${id}">
               <option value="light">Claro</option>
               <option value="dark">Oscuro</option>
             </select>
           </div>
           <div>
-            <label>Importancia</label>
-            <select name="importance-${id}">
+            <label for="importance-${id}">Importancia</label>
+            <select id="importance-${id}" name="importance-${id}">
               <option value="auto">Auto</option>
               <option value="destacado">Destacado</option>
             </select>
@@ -520,20 +861,285 @@
       blocksForm.appendChild(fs);
       state.blocks.push({ id, type:'text' });
 
-      const titleField = fs.querySelector(`input[name="title-${id}"]`);
-      const textField = fs.querySelector(`textarea[name="text-${id}"]`);
-      const styleField = fs.querySelector(`select[name="style-${id}"]`);
-      const importanceField = fs.querySelector(`select[name="importance-${id}"]`);
+      const titleField = fs.querySelector(`#title-${id}`);
+      const textField = fs.querySelector(`#text-${id}`);
+      const kindField = fs.querySelector(`#kind-${id}`);
+      const textEditor = fs.querySelector('[data-text-editor]');
+      const listControls = fs.querySelector('[data-list-controls]');
+      const listEditor = fs.querySelector('[data-list-editor]');
+      const listTypeField = fs.querySelector(`#list-type-${id}`);
+      const listMarkerField = fs.querySelector(`#list-marker-${id}`);
+      const listMarkerLabel = listControls.querySelector('[data-marker-label]');
+      const listGapField = fs.querySelector(`#list-gap-${id}`);
+      const listIndentField = fs.querySelector(`#list-indent-${id}`);
+      const listAlignField = fs.querySelector(`#list-align-${id}`);
+      const addItemButton = fs.querySelector('[data-add-list-item]');
+      const convertToTextButton = fs.querySelector('[data-convert-to-text]');
+      const styleField = fs.querySelector(`#style-${id}`);
+      const importanceField = fs.querySelector(`#importance-${id}`);
 
-      if(titleField) titleField.value = initial.title ?? `Bloque ${index}`;
-      if(textField) textField.value = initial.text ?? 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec commodo.';
-      if(styleField){
-        const style = (initial.style === 'dark') ? 'dark' : 'light';
-        styleField.value = style;
+      const normalizedInitial = normalizeTextBlock(initial && typeof initial === 'object' ? initial : {});
+      let initialTone = resolveBlockTone(normalizedInitial?.style);
+      if(initialTone !== 'dark') initialTone = 'light';
+
+      const initialKind = normalizedInitial?.kind === 'list' ? 'list' : 'text';
+      let initialListStyle = normalizedInitial?.style?.list ? { ...LIST_DEFAULT_STYLE, ...normalizedInitial.style.list } : { ...LIST_DEFAULT_STYLE };
+      if(initialKind === 'list' && initialListStyle.type !== 'numbered' && initialListStyle.type !== 'bulleted'){
+        initialListStyle.type = 'bulleted';
       }
-      if(importanceField){
-        const importance = initial.importance === 'destacado' ? 'destacado' : 'auto';
-        importanceField.value = importance;
+      if(initialListStyle.marker !== 'dash' && initialListStyle.marker !== 'decimal'){
+        initialListStyle.marker = 'bullet';
+      }
+
+      const initialItems = cleanListItems(Array.isArray(normalizedInitial?.content?.items) ? normalizedInitial.content.items.map((item)=>item?.text || '') : []);
+
+      const titleValue = (normalizedInitial?.title && normalizedInitial.title.length) ? normalizedInitial.title : (initial.title ?? `Bloque ${index}`);
+      const textValue = (normalizedInitial?.text && normalizedInitial.text.length) ? normalizedInitial.text : (typeof initial.text === 'string' ? initial.text : 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec commodo.');
+      const importanceValue = normalizedInitial?.importance === 'destacado' ? 'destacado' : 'auto';
+
+      if(titleField) titleField.value = titleValue;
+      if(textField) textField.value = textValue;
+      if(styleField) styleField.value = initialTone;
+      if(importanceField) importanceField.value = importanceValue;
+
+      let lastBulletedMarker = initialListStyle.marker === 'dash' ? 'dash' : 'bullet';
+
+      function renderMarkerOptions(type, desired){
+        if(!listMarkerField) return;
+        if(type === 'numbered'){
+          const current = listMarkerField.value;
+          if(current === 'dash' || current === 'bullet'){
+            lastBulletedMarker = current;
+          }
+          if(listMarkerLabel) listMarkerLabel.textContent = 'Formato';
+          listMarkerField.innerHTML = '<option value="decimal">1, 2, 3</option>';
+          listMarkerField.value = 'decimal';
+          listMarkerField.disabled = true;
+        } else {
+          if(listMarkerLabel) listMarkerLabel.textContent = 'Viñeta';
+          listMarkerField.disabled = false;
+          listMarkerField.innerHTML = '<option value="bullet">• redonda</option><option value="dash">– guion</option>';
+          const next = desired === 'dash' ? 'dash' : desired === 'bullet' ? 'bullet' : lastBulletedMarker;
+          lastBulletedMarker = next === 'dash' ? 'dash' : 'bullet';
+          listMarkerField.value = next;
+        }
+      }
+
+      function getListItems(){
+        const inputs = listEditor ? listEditor.querySelectorAll('input[type="text"]') : [];
+        return Array.from(inputs, (input)=>input.value || '');
+      }
+
+      function addListItem(value = '', focus = false){
+        if(!listEditor) return;
+        const row = document.createElement('div');
+        row.className = 'list-item';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = value;
+        input.placeholder = 'Elemento de lista';
+        row.appendChild(input);
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.setAttribute('aria-label', 'Eliminar ítem');
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', ()=>{
+          row.remove();
+          if(!listEditor.querySelector('.list-item')){
+            addListItem('');
+          }
+        });
+        row.appendChild(removeBtn);
+        input.addEventListener('keydown', (event)=>{
+          if(event.key === 'Enter'){
+            event.preventDefault();
+            addListItem('', true);
+          }
+        });
+        listEditor.appendChild(row);
+        if(focus){
+          setTimeout(()=>input.focus(), 0);
+        }
+        return input;
+      }
+
+      function populateListEditor(items){
+        if(!listEditor) return;
+        listEditor.innerHTML = '';
+        const values = items && items.length ? items : ['',''];
+        values.forEach((value)=>addListItem(value));
+      }
+
+      function updateKindUI(){
+        const kind = kindField.value === 'list' ? 'list' : 'text';
+        if(textEditor) textEditor.hidden = kind === 'list';
+        if(listControls){
+          listControls.hidden = kind !== 'list';
+        }
+        fs.dataset.blockKind = kind;
+      }
+
+      function convertListToText(){
+        const items = cleanListItems(getListItems());
+        const listType = listTypeField?.value === 'numbered' ? 'numbered' : 'bulleted';
+        const markerValue = listType === 'numbered' ? 'decimal' : (listMarkerField?.value === 'dash' ? 'dash' : 'bullet');
+        const serialized = serializeListToText(items, listType, markerValue);
+        if(textField) textField.value = serialized;
+        kindField.value = 'text';
+        updateKindUI();
+      }
+
+      function convertTextToList(preferred){
+        if(!textField) return;
+        const textValue = textField.value || '';
+        let items = [];
+        let styleOverride = null;
+        if(preferred && Array.isArray(preferred.items) && preferred.items.length){
+          items = preferred.items;
+          styleOverride = preferred;
+        } else {
+          const parsed = detectListStructure(textValue);
+          if(parsed){
+            items = parsed.items;
+            styleOverride = parsed;
+          } else {
+            items = cleanListItems(textValue.split(/\r?\n/));
+            if(items.length < 2){
+              items = ['', ''];
+            }
+          }
+        }
+        if(styleOverride){
+          const type = styleOverride.type === 'numbered' ? 'numbered' : 'bulleted';
+          if(listTypeField){
+            listTypeField.value = type;
+          }
+          renderMarkerOptions(type, styleOverride.marker);
+        } else {
+          const type = listTypeField?.value === 'numbered' ? 'numbered' : 'bulleted';
+          renderMarkerOptions(type);
+        }
+        populateListEditor(items);
+        kindField.value = 'list';
+        updateKindUI();
+        textField.dataset.listDetectionHash = '';
+        textField.dataset.listDetectionDismissed = '';
+      }
+
+      function handleKindChange(){
+        const nextKind = kindField.value === 'list' ? 'list' : 'text';
+        if(nextKind === 'list'){
+          const items = cleanListItems(getListItems());
+          if(!items.length){
+            convertTextToList();
+            return;
+          }
+        } else {
+          const items = getListItems();
+          if(items.length){
+            const listType = listTypeField?.value === 'numbered' ? 'numbered' : 'bulleted';
+            const markerValue = listType === 'numbered' ? 'decimal' : (listMarkerField?.value === 'dash' ? 'dash' : 'bullet');
+            if(textField) textField.value = serializeListToText(items, listType, markerValue);
+          }
+        }
+        updateKindUI();
+      }
+
+      function scheduleDetection(){
+        if(!textField) return;
+        if(kindField.value !== 'text') return;
+        const detection = detectListStructure(textField.value);
+        if(!detection){
+          textField.dataset.listDetectionHash = '';
+          textField.dataset.listDetectionDismissed = '';
+          return;
+        }
+        const hash = `${detection.type}|${detection.marker}|${detection.items.join('||')}`;
+        if(textField.dataset.listDetectionHash === hash || textField.dataset.listDetectionDismissed === hash){
+          return;
+        }
+        textField.dataset.listDetectionHash = hash;
+        showToast('¿Convertir a lista?', [
+          {
+            label:'Deshacer',
+            onClick:()=>{
+              textField.dataset.listDetectionDismissed = hash;
+            },
+          },
+          {
+            label:'Aplicar',
+            primary:true,
+            onClick:()=>{
+              textField.dataset.listDetectionDismissed = '';
+              convertTextToList(detection);
+            },
+          },
+        ]);
+      }
+
+      if(kindField){
+        kindField.value = initialKind;
+        kindField.addEventListener('change', handleKindChange);
+      }
+
+      const resolvedListType = initialListStyle.type === 'numbered' ? 'numbered' : 'bulleted';
+      if(listTypeField){
+        listTypeField.value = resolvedListType;
+        renderMarkerOptions(resolvedListType, initialListStyle.marker);
+      }
+      if(listGapField) listGapField.value = initialListStyle.gap || LIST_DEFAULT_STYLE.gap;
+      if(listIndentField) listIndentField.value = initialListStyle.indent || LIST_DEFAULT_STYLE.indent;
+      if(listAlignField) listAlignField.value = initialListStyle.align || LIST_DEFAULT_STYLE.align;
+
+      if(initialKind === 'list' && initialItems.length){
+        populateListEditor(initialItems);
+      }
+
+      updateKindUI();
+
+      if(addItemButton){
+        addItemButton.addEventListener('click', ()=>{
+          addListItem('', true);
+        });
+      }
+
+      if(convertToTextButton){
+        convertToTextButton.addEventListener('click', ()=>{
+          convertListToText();
+        });
+      }
+
+      if(listTypeField){
+        listTypeField.addEventListener('change', ()=>{
+          const type = listTypeField?.value === 'numbered' ? 'numbered' : 'bulleted';
+          const desired = type === 'numbered' ? 'decimal' : listMarkerField?.value;
+          renderMarkerOptions(type, desired);
+        });
+      }
+
+      if(textField){
+        let detectionTimer = null;
+        const triggerDetection = ()=>{
+          if(detectionTimer) clearTimeout(detectionTimer);
+          detectionTimer = setTimeout(()=>{
+            scheduleDetection();
+          }, 180);
+        };
+        textField.addEventListener('input', triggerDetection);
+        textField.addEventListener('paste', ()=>{
+          setTimeout(scheduleDetection, 120);
+        });
+        textField.addEventListener('blur', ()=>{
+          if(kindField.value === 'text'){
+            scheduleDetection();
+          }
+        });
+      }
+
+      if(initialKind === 'list' && !initialItems.length){
+        populateListEditor(['','']);
+      } else if(initialKind !== 'list'){
+        populateListEditor([]);
       }
     }
 
@@ -626,17 +1232,66 @@
         if(b.type==='text'){
           const titleField = blocksForm.querySelector(`input[name="title-${b.id}"]`);
           const textField = blocksForm.querySelector(`textarea[name="text-${b.id}"]`);
+          const kindField = blocksForm.querySelector(`select[name="kind-${b.id}"]`);
           const styleField = blocksForm.querySelector(`select[name="style-${b.id}"]`);
           const importanceField = blocksForm.querySelector(`select[name="importance-${b.id}"]`);
-          const text = textField?.value.trim();
-          if(text){
-            blocks.push({
-              type:'text',
-              title: titleField?.value.trim() || '',
-              text,
-              style: styleField?.value || 'light',
-              importance: importanceField?.value || 'auto',
-            });
+          const listEditor = blocksForm.querySelector(`[data-list-items="${b.id}"]`);
+          const listTypeField = blocksForm.querySelector(`select[name="list-type-${b.id}"]`);
+          const listMarkerField = blocksForm.querySelector(`select[name="list-marker-${b.id}"]`);
+          const listGapField = blocksForm.querySelector(`select[name="list-gap-${b.id}"]`);
+          const listIndentField = blocksForm.querySelector(`select[name="list-indent-${b.id}"]`);
+          const listAlignField = blocksForm.querySelector(`select[name="list-align-${b.id}"]`);
+
+          const tone = (styleField?.value === 'dark') ? 'dark' : 'light';
+          const importance = importanceField?.value === 'destacado' ? 'destacado' : 'auto';
+          const title = titleField?.value.trim() || '';
+          const kind = kindField?.value === 'list' ? 'list' : 'text';
+
+          if(kind === 'list'){
+            const itemInputs = listEditor ? listEditor.querySelectorAll('input[type="text"]') : [];
+            const rawItems = Array.from(itemInputs, (input)=>input.value || '');
+            const items = cleanListItems(rawItems).map((value)=>({ text:value }));
+            if(items.length){
+              const listType = listTypeField?.value === 'numbered' ? 'numbered' : 'bulleted';
+              const marker = listType === 'numbered' ? 'decimal' : (listMarkerField?.value === 'dash' ? 'dash' : 'bullet');
+              const gap = listGapField?.value || LIST_DEFAULT_STYLE.gap;
+              const indent = listIndentField?.value || LIST_DEFAULT_STYLE.indent;
+              const align = listAlignField?.value || LIST_DEFAULT_STYLE.align;
+              const serialized = serializeListToText(items.map((item)=>item.text), listType, marker);
+              blocks.push({
+                type:'text',
+                title,
+                kind:'list',
+                text: serialized,
+                content:{ items },
+                style:{ tone, list:{ type:listType, marker, gap, indent, align } },
+                importance,
+              });
+            } else {
+              const text = textField?.value.trim();
+              if(text){
+                blocks.push({
+                  type:'text',
+                  title,
+                  kind:'text',
+                  text,
+                  style:{ tone },
+                  importance,
+                });
+              }
+            }
+          } else {
+            const text = textField?.value.trim();
+            if(text){
+              blocks.push({
+                type:'text',
+                title,
+                kind:'text',
+                text,
+                style:{ tone },
+                importance,
+              });
+            }
           }
         } else if(b.type==='img'){
           const fileInput = blocksForm.querySelector(`input[name="file-${b.id}"]`);
@@ -687,13 +1342,8 @@
       let droppedImages = 0;
       for(const block of blocks){
         if(block.type === 'text'){
-          plain.push({
-            type:'text',
-            title:block.title || '',
-            text:block.text || '',
-            style:block.style || 'light',
-            importance:block.importance || 'auto',
-          });
+          const normalized = normalizeTextBlock(block);
+          if(normalized) plain.push(normalized);
         } else if(block.type === 'img'){
           const ratioW = block.ratioW || 1;
           const ratioH = block.ratioH || 1;
@@ -728,7 +1378,7 @@
     function loadInfographicFromData(data){
       if(!data || typeof data !== 'object') throw new Error('Datos inválidos');
       const blocks = Array.isArray(data.blocks) ? data.blocks : [];
-      const textBlocks = blocks.filter((b)=>b?.type==='text');
+      const textBlocks = blocks.filter((b)=>b?.type==='text').map((block)=>normalizeTextBlock(block)).filter(Boolean);
       const imgBlocks = blocks.filter((b)=>b?.type==='img');
 
       document.getElementById('title').value = data.title || '';
@@ -837,7 +1487,13 @@
       const rand = mulberry32(state.seed);
 
       // Copia y mezcla de bloques
-      const items = (state.data||[]).map((x,i)=>({ ...x, _i:i }));
+      const items = (state.data||[]).map((x,i)=>{
+        if(x?.type === 'text'){
+          const normalized = normalizeTextBlock(x);
+          return { ...normalized, _i:i };
+        }
+        return { ...x, _i:i };
+      });
       for(let i=items.length-1;i>0;i--){ const j = Math.floor(rand()*(i+1)); [items[i],items[j]]=[items[j],items[i]]; }
 
       const cols = 3; // máximo 3 columnas
@@ -911,10 +1567,40 @@
 
         if(item.type==='text'){
           const pad = document.createElement('div'); pad.className='pad';
+          const tone = resolveBlockTone(item.style);
+          block.dataset.kind = item.kind || 'text';
           if(item.title){ const h = document.createElement('h3'); h.textContent=item.title; pad.appendChild(h); }
-          const p = document.createElement('p'); p.textContent = item.text; pad.appendChild(p);
+          const listStyle = item.style?.list || null;
+          const listItems = Array.isArray(item.content?.items) ? item.content.items : [];
+          if(item.kind === 'list' && listItems.length){
+            const type = (listStyle?.type === 'numbered') ? 'numbered' : 'bulleted';
+            const marker = type === 'numbered' ? 'decimal' : (listStyle?.marker === 'dash' ? 'dash' : 'bullet');
+            const list = document.createElement(type === 'numbered' ? 'ol' : 'ul');
+            list.className = 'list';
+            list.dataset.type = type;
+            list.dataset.marker = marker;
+            const gapToken = listStyle?.gap || LIST_DEFAULT_STYLE.gap;
+            const indentToken = listStyle?.indent || LIST_DEFAULT_STYLE.indent;
+            const align = listStyle?.align || LIST_DEFAULT_STYLE.align;
+            list.style.setProperty('--list-gap', spacingTokenToCss(gapToken));
+            const indentValue = (align === 'center' || align === 'end') ? indentTokenToCss('none') : indentTokenToCss(indentToken);
+            list.style.setProperty('--list-indent', indentValue);
+            block.dataset.listAlign = align;
+            for(const entry of listItems){
+              const li = document.createElement('li');
+              const value = typeof entry === 'string' ? entry : entry?.text || '';
+              li.textContent = value;
+              list.appendChild(li);
+            }
+            pad.appendChild(list);
+          } else {
+            const p = document.createElement('p');
+            p.textContent = item.text || '';
+            pad.appendChild(p);
+            block.removeAttribute('data-list-align');
+          }
           block.appendChild(pad);
-          if((item.style||'light')==='dark') block.classList.add('fill-ink');
+          if(tone === 'dark') block.classList.add('fill-ink'); else block.classList.remove('fill-ink');
 
           grid.appendChild(block);
           scheduleSizing(block, 'text');
