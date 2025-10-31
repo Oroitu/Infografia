@@ -32,6 +32,24 @@ export const themePacks = [
       '0 10px 30px rgba(0, 0, 0, 0.18)',
       '0 18px 50px rgba(0, 0, 0, 0.25)'
     ],
+    grid: {
+      columns: 3,
+      columnGap: 18,
+      rowUnit: 2,
+    },
+    components: {
+      block: {
+        background: 'paper-muted',
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: 'auto',
+        radius: 'md',
+        shadow: 'none',
+        paddingToken: 'md',
+        darkFillBackground: 'accentStrong',
+        darkFillText: 'onAccentStrong',
+      },
+    },
   },
   {
     id: 'sunrise-sand',
@@ -66,6 +84,24 @@ export const themePacks = [
       '0 6px 18px rgba(201, 134, 52, 0.22)',
       '0 22px 40px rgba(249, 115, 22, 0.18)'
     ],
+    grid: {
+      columns: 3,
+      columnGap: 20,
+      rowUnit: 2,
+    },
+    components: {
+      block: {
+        background: 'paper-muted',
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: 'auto',
+        radius: 'md',
+        shadow: 'none',
+        paddingToken: 'md',
+        darkFillBackground: 'accentStrong',
+        darkFillText: 'onAccentStrong',
+      },
+    },
   },
   {
     id: 'emerald-forest',
@@ -100,6 +136,24 @@ export const themePacks = [
       '0 10px 24px rgba(19, 89, 64, 0.22)',
       '0 20px 44px rgba(59, 161, 114, 0.28)'
     ],
+    grid: {
+      columns: 3,
+      columnGap: 16,
+      rowUnit: 2,
+    },
+    components: {
+      block: {
+        background: 'paper-muted',
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: 'auto',
+        radius: 'md',
+        shadow: 'none',
+        paddingToken: 'md',
+        darkFillBackground: 'accentStrong',
+        darkFillText: 'onAccentStrong',
+      },
+    },
   }
 ];
 
